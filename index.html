@@ -190,7 +190,7 @@ footer { margin-top: 40px; font-size: 13px; color: var(--muted); display: grid; 
     </div>
   </section>
 
-  <section aria-labelledby="h-proj" id="sec-proj">
+  <section aria-labelledby="h-proj" id="sec-proj" hidden>
     <div class="sec-head"><h2 id="h-proj">Projeção do resultado final</h2><span class="label" id="proj-meta-top"></span></div>
     <div class="proj" id="proj">
       <div class="proj-duel" id="proj-duel"></div>
@@ -238,6 +238,10 @@ const BASE = "https://resultados.tse.jus.br/oficial/ele2026";
 const TURNOS = { t1: { pres: 6257 }, t2: { pres: 6258 } };
 // Teste de ponta a ponta: com #teste no endereço, o "2º turno" usa os arquivos do 1º turno (já apurados)
 if (location.hash === "#teste") TURNOS.t2 = { pres: 6257 };
+// A projeção só aparece a partir do fechamento das urnas: domingo 25/10/2026, 17h de Brasília (20h UTC).
+// Com #teste no endereço ela aparece antes, para conferência.
+const LIBERA_PROJECAO = Date.parse("2026-10-25T20:00:00Z");
+const projecaoLiberada = () => location.hash === "#teste" || Date.now() >= LIBERA_PROJECAO;
 const UFS = {
   ac: "Acre", al: "Alagoas", am: "Amazonas", ap: "Amapá", ba: "Bahia", ce: "Ceará", df: "Distrito Federal",
   es: "Espírito Santo", go: "Goiás", ma: "Maranhão", mg: "Minas Gerais", ms: "Mato Grosso do Sul",
@@ -502,7 +506,8 @@ async function carregarAoVivo() {
   seguir();
 
   let proj = null;
-  if (modo === "t2" && L && R) {
+  const comProjecao = modo === "t2" && projecaoLiberada();
+  if (comProjecao && L && R) {
     const base = await base1t(L.n, R.n);
     const est = estadoMunicipios(T.pres);
     let falhas = [];
@@ -528,12 +533,14 @@ async function carregarAoVivo() {
     renderProj(proj, L, R, hist, [x0, Math.max(x0 + 60, hist.length ? hist[hist.length - 1].x : x0 + 60)]);
     if (falhas.length) notice(`Alguns municípios de ${falhas.length} estado(s) não responderam; serão lidos na próxima atualização.`);
   }
-  $("#sec-proj").hidden = modo !== "t2";
+  $("#sec-proj").hidden = !comProjecao;
 
   tabela = { linhas: ufs, proj, nomes: [L?.nm || "—", R?.nm || "—"] };
   renderStates();
 
-  if (modo === "t2" && pres.pst === 0) notice("A apuração do 2º turno ainda não começou. A projeção abaixo é a referência inicial. Para ver a página com dados reais, use \"1º turno\".");
+  if (modo === "t2" && pres.pst === 0) notice(comProjecao
+    ? "As urnas fecharam. A projeção abaixo é a referência inicial e se ajusta a partir dos primeiros municípios apurados."
+    : "A apuração do 2º turno começa no domingo, 25/10, às 17h (horário de Brasília). Para ver a página com dados reais, use \"1º turno\".");
   else if (!$("#notice").classList.contains("err")) notice("");
 
   const stamp = `${pres.dg} ${pres.hg}|${pres.pst}`;
