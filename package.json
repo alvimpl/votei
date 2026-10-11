@@ -1,0 +1,9 @@
+{
+  "name": "votei",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "base": "node ferramentas/montar-base-1t.mjs",
+    "reencenar": "node ferramentas/reencenar-2022.mjs"
+  }
+}
