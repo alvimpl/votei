@@ -59,11 +59,6 @@ button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px 
 .notice { margin-top: 16px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); font-size: 14px; }
 .notice.err { border-color: var(--bad); color: var(--bad); }
 
-.simbar { margin-top: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
-.simbar input[type=range] { flex: 1 1 200px; min-width: 0; accent-color: var(--c1); }
-.simbar .hora { font-family: var(--display); font-size: 24px; font-weight: 600; min-width: 64px; }
-.simbar p { margin: 0; flex-basis: 100%; font-size: 13px; color: var(--muted); }
-
 section { margin-top: 28px; }
 .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .sec-head h2 { font-size: 26px; }
@@ -169,7 +164,6 @@ footer { margin-top: 40px; font-size: 13px; color: var(--muted); display: grid; 
     <div class="seg" role="group" aria-label="O que mostrar">
       <button id="btn-t2" type="button" data-modo="t2">2º turno</button>
       <button id="btn-t1" type="button" data-modo="t1">1º turno</button>
-      <button id="btn-sim" type="button" data-modo="sim">Simulação 2022</button>
     </div>
     <div class="status">
       <span class="dot" id="dot"></span><span id="status-txt">Carregando…</span>
@@ -180,13 +174,6 @@ footer { margin-top: 40px; font-size: 13px; color: var(--muted); display: grid; 
 
 <main class="wrap">
   <div id="notice" class="notice" hidden></div>
-
-  <div class="simbar" id="simbar" hidden>
-    <button class="btn" id="sim-play" type="button">▶ Reproduzir</button>
-    <span class="hora" id="sim-hora">17:00</span>
-    <input type="range" id="sim-tempo" min="1020" max="1260" step="1" value="1020" aria-label="Horário da reencenação">
-    <p>Reencenação do 2º turno de 2022 (Lula × Bolsonaro): cada zona eleitoral entra no horário em que o TSE a totalizou naquela noite. A projeção só enxerga o que já tinha sido apurado em cada momento.</p>
-  </div>
 
   <section aria-labelledby="h-pres">
     <div class="sec-head"><h2 id="h-pres">Presidente · apurado</h2><span class="label" id="pres-meta"></span></div>
@@ -221,7 +208,7 @@ footer { margin-top: 40px; font-size: 13px; color: var(--muted); display: grid; 
         <p>O resultado do 1º turno em cada um dos 5.570 municípios é a referência. Nos municípios que já foram apurados, a página mede quanto o 2º turno está se desviando dessa referência. Esse desvio é calculado por estado; quando um estado ainda tem poucos dados, a página usa o da região e o do país. Depois aplica o desvio aos votos que faltam em cada município, considerando o eleitorado de cada um.</p>
         <p>Os votos que no 1º turno foram para os demais candidatos são divididos conforme o que a apuração mostra: a página observa os municípios onde esses candidatos foram fortes e vê para que lado esses votos foram.</p>
         <p>A faixa e a chance de vitória vêm de 4.000 simulações dos votos que ainda faltam. Quanto mais apurado, mais estreita a faixa.</p>
-        <p>Teste com a noite do 2º turno de 2022, na ordem real em que as zonas foram totalizadas: o erro médio foi de 0,2 ponto percentual, e o resultado final ficou dentro da faixa em todos os horários. Às 19h, com 25% apurado, Bolsonaro liderava o apurado (50,2%), e a projeção já indicava Lula com 51,0% e 96% de chance. O resultado final foi Lula com 50,9%. Dá para ver isso no modo "Simulação 2022".</p>
+        <p>Teste com a noite do 2º turno de 2022, na ordem real em que as zonas foram totalizadas: o erro médio foi de 0,2 ponto percentual, e o resultado final ficou dentro da faixa em todos os horários. Às 19h, com 25% apurado, Bolsonaro liderava o apurado (50,2%), e a projeção já indicava Lula com 51,0% e 96% de chance. O resultado final foi Lula com 50,9%.</p>
       </details>
     </div>
   </section>
@@ -309,7 +296,7 @@ function parse(d) {
 
 // ---------- estado da página ----------
 let modo = store.get("votei.modo") || "t2";
-if (!["t1", "t2", "sim"].includes(modo)) modo = "t2";
+if (!["t1", "t2"].includes(modo)) modo = "t2";
 let timer = null, proxima = 0, ocupado = false, lastStamp = "";
 let sortKey = "pst", sortDir = -1;
 let tabela = { linhas: [], proj: null, nomes: ["—", "—"] };
@@ -547,7 +534,7 @@ async function carregarAoVivo() {
   tabela = { linhas: ufs, proj, nomes: [L?.nm || "—", R?.nm || "—"] };
   renderStates();
 
-  if (modo === "t2" && pres.pst === 0) notice("A apuração do 2º turno ainda não começou. A projeção abaixo é a referência inicial. Para ver a página funcionando, use \"Simulação 2022\" ou \"1º turno\".");
+  if (modo === "t2" && pres.pst === 0) notice("A apuração do 2º turno ainda não começou. A projeção abaixo é a referência inicial. Para ver a página com dados reais, use \"1º turno\".");
   else if (!$("#notice").classList.contains("err")) notice("");
 
   const stamp = `${pres.dg} ${pres.hg}|${pres.pst}`;
@@ -556,79 +543,9 @@ async function carregarAoVivo() {
   return pres;
 }
 
-// ---------- modo simulação (2022) ----------
-const sim = { dados: null, base: null, zonas: null, serie: null, final: null, tocando: null };
-async function prepararSim() {
-  if (sim.dados) return;
-  setStatus("", "Carregando dados de 2022…");
-  sim.dados = (await getJSON("dados/presidente-2022-mun.json")).municipios;
-  sim.base = []; sim.zonas = [];
-  for (const [k, m] of Object.entries(sim.dados)) {
-    const t1 = m.t1 || {};
-    const V1 = Object.entries(t1).filter(([n]) => /^\d+$/.test(n)).reduce((s, [, v]) => s + v, 0);
-    sim.base.push({ k, uf: k.slice(0, 2), aptos1: t1.aptos || 0, V1, A1: t1["13"] || 0, B1: t1["22"] || 0 });
-    for (const z of Object.values(m.t2z || {})) sim.zonas.push({ k, uf: k.slice(0, 2), A: z["13"] || 0, B: z["22"] || 0, aptos: z.aptos || 0, fim: z.fim || "9" });
-  }
-}
-function obsSim(min) {
-  const lim = `2022-10-30 ${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}:00`;
-  const obs = new Map(), uf = {};
-  for (const z of sim.zonas) {
-    const o = obs.get(z.k) || { A: 0, B: 0, aptosTot: 0, aptosRest: 0 };
-    const u = (uf[z.uf] ||= { A: 0, B: 0, tot: 0, rest: 0 });
-    if (z.fim <= lim) { o.A += z.A; o.B += z.B; o.aptosTot += z.aptos; u.A += z.A; u.B += z.B; u.tot += z.aptos; }
-    else { o.aptosRest += z.aptos; u.rest += z.aptos; }
-    obs.set(z.k, o);
-  }
-  return { obs, uf };
-}
-async function calcularSerieSim() {
-  if (sim.serie) return;
-  sim.serie = [];
-  for (let m = 1020; m <= 1260; m += 5) {
-    const { obs } = obsSim(m), p = projetar(sim.base, obs, { sims: 600 });
-    let a = 0, b = 0; for (const o of obs.values()) { a += o.A; b += o.B; }
-    sim.serie.push({ x: m, pr: p.share * 100, lo: p.faixa90[0] * 100, hi: p.faixa90[1] * 100, ap: a + b ? (100 * a) / (a + b) : null });
-    if (m % 30 === 0) await new Promise((r) => setTimeout(r, 0));
-  }
-}
-function mostrarSim(min) {
-  const { obs, uf } = obsSim(min);
-  let a = 0, b = 0, tot = 0, rest = 0;
-  for (const u of Object.values(uf)) { a += u.A; b += u.B; tot += u.tot; rest += u.rest; }
-  const pct = (x) => (a + b ? (100 * x) / (a + b) : 0);
-  const pres = {
-    cands: [{ n: "13", nm: "LULA", par: "PT", vap: a, pct: pct(a) }, { n: "22", nm: "JAIR BOLSONARO", par: "PL", vap: b, pct: pct(b) }].sort((x, y) => y.vap - x.vap),
-    pst: tot + rest ? (100 * tot) / (tot + rest) : 0, esnt: rest, hora: "",
-  };
-  const [L, R] = renderPres(pres, 0);
-  const proj = projetar(sim.base, obs);
-  const hist = (sim.serie || []).filter((p) => p.x < min);
-  let ap = null; if (a + b) ap = (100 * (L.n === "13" ? a : b)) / (a + b);
-  hist.push({ x: min, pr: proj.share * 100, lo: proj.faixa90[0] * 100, hi: proj.faixa90[1] * 100, ap });
-  // A série é calculada para Lula; se a cor 1 não for Lula, inverte
-  const serie = L.n === "13" ? hist : hist.map((p) => ({ x: p.x, pr: 100 - p.pr, lo: 100 - p.hi, hi: 100 - p.lo, ap: p.ap == null ? null : 100 - p.ap }));
-  const projL = L.n === "13" ? proj : { ...proj, share: 1 - proj.share, faixa90: [1 - proj.faixa90[1], 1 - proj.faixa90[0]], chanceA: 1 - proj.chanceA, transferencia: 1 - proj.transferencia };
-  renderProj(projL, L, R, serie, [1020, 1260]);
-  $("#sec-proj").hidden = false;
-  const linhas = Object.keys(UFS).map((k) => {
-    const u = uf[k] || { A: 0, B: 0, tot: 0, rest: 0 }, t = u.A + u.B;
-    const [vL, vR] = L.n === "13" ? [u.A, u.B] : [u.B, u.A];
-    return { uf: k, pst: u.tot + u.rest ? (100 * u.tot) / (u.tot + u.rest) : 0, p1: t ? (100 * vL) / t : 0, p2: t ? (100 * vR) / t : 0, v1: vL, v2: vR };
-  });
-  const porUF = L.n === "13" ? proj.porUF : Object.fromEntries(Object.entries(proj.porUF).map(([k, p]) => [k, { ...p, A: p.B, B: p.A, restA: p.restB, restB: p.restA }]));
-  tabela = { linhas, proj: { porUF }, nomes: [L.nm, R.nm] };
-  renderStates();
-  const hh = `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
-  $("#sim-hora").textContent = hh;
-  $("#pres-meta").textContent = `30/10/2022 às ${hh}`;
-  setStatus("", "Simulação: dados de 2022, sem atualização automática");
-}
-function pararSim() { clearInterval(sim.tocando); sim.tocando = null; $("#sim-play").textContent = "▶ Reproduzir"; }
-
 // ---------- ciclo ----------
 async function load() {
-  if (ocupado || modo === "sim") return;
+  if (ocupado) return;
   ocupado = true; $("#btn-atualizar").disabled = true;
   clearTimeout(timer);
   const m0 = modo;
@@ -643,13 +560,12 @@ async function load() {
     }
   }
   ocupado = false; $("#btn-atualizar").disabled = false;
-  if (modo === "sim") return;
   if (modo !== m0) return load(); // trocou de modo durante a leitura: lê o modo novo já
   proxima = Date.now() + REFRESH_MS;
   timer = setTimeout(load, REFRESH_MS);
 }
 setInterval(() => {
-  if (modo === "sim" || ocupado || !proxima) return;
+  if (ocupado || !proxima) return;
   const s = Math.max(0, Math.round((proxima - Date.now()) / 1000));
   $("#btn-atualizar").textContent = `Atualizar agora · ${s}s`;
 }, 1000);
@@ -657,18 +573,9 @@ setInterval(() => {
 async function setModo(m) {
   modo = m; store.set("votei.modo", m);
   document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.modo === m)));
-  lastStamp = ""; clearTimeout(timer); pararSim();
-  $("#simbar").hidden = m !== "sim";
-  $("#btn-atualizar").hidden = m === "sim";
-  $("#h-pres").textContent = "Presidente · apurado";
+  lastStamp = ""; clearTimeout(timer);
   notice("");
-  if (m === "sim") {
-    try {
-      await prepararSim();
-      mostrarSim(Number($("#sim-tempo").value));
-      calcularSerieSim().then(() => modo === "sim" && !sim.tocando && mostrarSim(Number($("#sim-tempo").value)));
-    } catch (e) { setStatus("err", "Falha"); notice(`Não foi possível carregar os dados de 2022 (${e.message}).`, true); }
-  } else load();
+  load();
 }
 
 document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => setModo(b.dataset.modo)));
@@ -679,19 +586,7 @@ $("#tbl thead").addEventListener("click", (ev) => {
   if (k === sortKey) sortDir = -sortDir; else { sortKey = k; sortDir = k === "uf" ? 1 : -1; }
   renderStates();
 });
-$("#sim-tempo").addEventListener("input", (e) => { pararSim(); mostrarSim(Number(e.target.value)); });
-$("#sim-play").addEventListener("click", () => {
-  if (sim.tocando) return pararSim();
-  const r = $("#sim-tempo");
-  if (Number(r.value) >= Number(r.max)) r.value = r.min;
-  $("#sim-play").textContent = "❚❚ Pausar";
-  sim.tocando = setInterval(() => {
-    const v = Math.min(Number(r.max), Number(r.value) + 2);
-    r.value = v; mostrarSim(v);
-    if (v >= Number(r.max)) pararSim();
-  }, 250);
-});
-document.addEventListener("visibilitychange", () => { if (!document.hidden && modo !== "sim") load(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
 setModo(modo);
 // Acesso para teste pelo console do navegador
 window.votei = { base1t, projetar, estadoMunicipios };
