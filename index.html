@@ -241,7 +241,23 @@ if (location.hash === "#teste") TURNOS.t2 = { pres: 6257 };
 // A projeção só aparece a partir do fechamento das urnas: domingo 25/10/2026, 17h de Brasília (20h UTC).
 // Com #teste no endereço ela aparece antes, para conferência.
 const LIBERA_PROJECAO = Date.parse("2026-10-25T20:00:00Z");
-const projecaoLiberada = () => location.hash === "#teste" || Date.now() >= LIBERA_PROJECAO;
+const projecaoLiberada = () => location.hash === "#teste" || agora() >= LIBERA_PROJECAO;
+
+// Hora do servidor do site (cabeçalho Date), para não depender do relógio do aparelho.
+// Se não der para ler, usa o relógio do aparelho mesmo.
+let desvioRelogio = 0, relogioLidoEm = 0;
+const agora = () => Date.now() + desvioRelogio;
+async function sincronizarRelogio() {
+  if (relogioLidoEm && Date.now() - relogioLidoEm < 10 * 60 * 1000) return;
+  try {
+    const t0 = Date.now();
+    const r = await fetch(location.pathname, { method: "HEAD", cache: "no-store" });
+    const t1 = Date.now();
+    const servidor = Date.parse(r.headers.get("date"));
+    // O cabeçalho vem em segundos inteiros: +500 ms centraliza o erro
+    if (Number.isFinite(servidor)) { desvioRelogio = servidor + 500 - (t0 + t1) / 2; relogioLidoEm = t1; }
+  } catch {}
+}
 const UFS = {
   ac: "Acre", al: "Alagoas", am: "Amazonas", ap: "Amapá", ba: "Bahia", ce: "Ceará", df: "Distrito Federal",
   es: "Espírito Santo", go: "Goiás", ma: "Maranhão", mg: "Minas Gerais", ms: "Mato Grosso do Sul",
@@ -495,7 +511,8 @@ async function carregarAoVivo() {
   const m0 = modo, T = TURNOS[m0];
   const seguir = () => { if (modo !== m0) throw CANCELADO; };
   setStatus("", "Atualizando…");
-  const pres = parse(await getJSON(urlCargo(T.pres, "br", 1)));
+  const [presBruto] = await Promise.all([getJSON(urlCargo(T.pres, "br", 1)), sincronizarRelogio()]);
+  const pres = parse(presBruto);
   seguir();
   const [L, R] = renderPres(pres, T.pres);
 
@@ -595,7 +612,7 @@ $("#tbl thead").addEventListener("click", (ev) => {
 document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
 setModo(modo);
 // Acesso para teste pelo console do navegador
-window.votei = { base1t, projetar, estadoMunicipios };
+window.votei = { base1t, projetar, estadoMunicipios, agora, sincronizarRelogio };
 </script>
 </body>
 </html>
