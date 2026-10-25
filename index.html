@@ -131,7 +131,7 @@ details p { margin: 8px 0 0; max-width: 68ch; }
 
 /* estados */
 .states { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
-.mapa { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; }
+.mapa { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: center; }
 .mapa .tiles { flex: 0 1 300px; }
 .mapa .legend { flex-direction: column; gap: 6px; margin-top: 0; }
 @media (max-width: 760px) {
@@ -283,7 +283,7 @@ const TILE = {
 const REFRESH_MS = 30000;
 // Versão publicada. A cada atualização a página compara com versao.json e, se houver
 // versão nova no ar, recarrega sozinha. Ao publicar: mudar aqui e no versao.json.
-const VERSAO = "2026-10-25.2";
+const VERSAO = "2026-10-25.3";
 async function verificarVersao() {
   try {
     const r = await fetch(`versao.json?t=${Date.now()}`, { cache: "no-store" });
