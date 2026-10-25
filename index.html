@@ -87,6 +87,8 @@ section { margin-top: 28px; }
 .split.sm .mid { top: -2px; bottom: -2px; width: 1px; }
 @media (prefers-reduced-motion: reduce) { .split > div, .prog > div { transition: none; } }
 
+.definido { border-radius: 8px; padding: 12px 14px; font-size: 16px; line-height: 1.4; background: color-mix(in srgb, var(--cor) 16%, var(--surface)); border: 1px solid var(--cor); }
+.definido strong { font-family: var(--display); font-size: 22px; font-weight: 700; color: var(--cor); display: block; }
 .lead { font-size: 18px; text-align: center; }
 .lead strong { font-family: var(--display); font-size: 22px; }
 
@@ -178,6 +180,7 @@ footer { margin-top: 40px; font-size: 13px; color: var(--muted); display: grid; 
   <section aria-labelledby="h-pres">
     <div class="sec-head"><h2 id="h-pres">Presidente · apurado</h2><span class="label" id="pres-meta"></span></div>
     <div class="board" id="pres">
+      <div class="definido" id="definido" role="status" hidden></div>
       <div class="duel">
         <div class="cand" id="cand-a"></div>
         <div class="vs">×</div>
@@ -276,6 +279,21 @@ const TILE = {
   sc: [1,6], rs: [1,7],
 };
 const REFRESH_MS = 30000;
+// Versão publicada. A cada atualização a página compara com versao.json e, se houver
+// versão nova no ar, recarrega sozinha. Ao publicar: mudar aqui e no versao.json.
+const VERSAO = "2026-10-25.1";
+async function verificarVersao() {
+  try {
+    const r = await fetch(`versao.json?t=${Date.now()}`, { cache: "no-store" });
+    const { v } = await r.json();
+    if (!v || v === VERSAO) return;
+    // Evita recarregar em loop se o servidor ainda entregar a página antiga
+    let ja = null; try { ja = sessionStorage.getItem("votei.recarregou"); } catch {}
+    if (ja === v) return;
+    try { sessionStorage.setItem("votei.recarregou", v); } catch {}
+    location.replace(`${location.pathname}?v=${encodeURIComponent(v)}${location.hash}`);
+  } catch {}
+}
 
 const $ = (s) => document.querySelector(s);
 const nf = new Intl.NumberFormat("pt-BR");
@@ -383,6 +401,29 @@ function renderPres(r, ele) {
   $("#legend").innerHTML = left && right ?
     `<span><i style="background:var(--c1)"></i>${esc(left.nm)}</span><span><i style="background:var(--c2)"></i>${esc(right.nm)}</span><span>Cor mais forte = margem maior no apurado</span>` : "";
   return [left, right];
+}
+
+// ---------- vencedor definido ----------
+// Matematicamente: a diferença já é maior que o número de eleitores que faltam apurar,
+// então nem com todos os votos restantes o segundo colocado vira. Oficial: o TSE marcou "Eleito".
+function renderDefinido(pres, L, R) {
+  const el = $("#definido");
+  const eleito = pres && [L, R].find((c) => c && /^eleit/i.test(c.st));
+  let html = "", cor = "";
+  if (eleito) {
+    cor = `var(--c${corDe(eleito.n)})`;
+    html = `<strong>${esc(eleito.nm)} está eleito</strong>O TSE já declarou o resultado da eleição presidencial.`;
+  } else if (pres && L && R && L.vap + R.vap > 0) {
+    const [lid, seg] = L.vap >= R.vap ? [L, R] : [R, L];
+    const dif = lid.vap - seg.vap;
+    if (dif > pres.esnt) {
+      cor = `var(--c${corDe(lid.n)})`;
+      html = `<strong>${esc(lid.nm)} já venceu matematicamente</strong>A diferença é de ${nf.format(dif)} votos e ${pres.esnt ? `faltam apurar só ${nf.format(pres.esnt)} eleitores. Mesmo que todos votassem em ${esc(seg.nm)}, não haveria virada.` : "não há mais eleitores a apurar."} A declaração oficial é do TSE.`;
+    }
+  }
+  el.hidden = !html;
+  el.innerHTML = html;
+  if (cor) el.style.setProperty("--cor", cor);
 }
 
 // ---------- renderização: projeção ----------
@@ -511,10 +552,11 @@ async function carregarAoVivo() {
   const m0 = modo, T = TURNOS[m0];
   const seguir = () => { if (modo !== m0) throw CANCELADO; };
   setStatus("", "Atualizando…");
-  const [presBruto] = await Promise.all([getJSON(urlCargo(T.pres, "br", 1)), sincronizarRelogio()]);
+  const [presBruto] = await Promise.all([getJSON(urlCargo(T.pres, "br", 1)), sincronizarRelogio(), verificarVersao()]);
   const pres = parse(presBruto);
   seguir();
   const [L, R] = renderPres(pres, T.pres);
+  renderDefinido(modo === "t2" ? pres : null, L, R);
 
   const ufs = await Promise.all(Object.keys(UFS).map((uf) => getJSON(urlCargo(T.pres, uf, 1)).then((d) => {
     const r = parse(d), c1 = r.cands.find((c) => c.n === L?.n), c2 = r.cands.find((c) => c.n === R?.n);
