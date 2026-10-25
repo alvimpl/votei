@@ -130,9 +130,11 @@ details summary { cursor: pointer; font-weight: 600; }
 details p { margin: 8px 0 0; max-width: 68ch; }
 
 /* estados */
-.states { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.states { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.mapa { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; }
+.mapa .tiles { flex: 0 1 300px; }
+.mapa .legend { flex-direction: column; gap: 6px; margin-top: 0; }
 @media (max-width: 760px) {
-  .states { grid-template-columns: minmax(0, 1fr); }
   .duel { grid-template-columns: 1fr 1fr; } .vs { display: none; }
   .cand img, .cand .ph { width: 48px; height: 60px; }
   .cand, .cand.right { flex-direction: column; align-items: flex-start; } .cand.right { align-items: flex-end; }
@@ -152,7 +154,7 @@ th:first-child, td:first-child { text-align: left; }
 tr:last-child td { border-bottom: 0; }
 th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; cursor: pointer; user-select: none; }
 th[aria-sort] { color: var(--fg); }
-td.bar { width: 26%; min-width: 110px; }
+td.bar { width: 22%; min-width: 100px; }
 .uf { font-weight: 700; }
 .ufn { color: var(--muted); font-size: 12px; margin-left: 6px; }
 
@@ -218,7 +220,7 @@ footer { margin-top: 40px; font-size: 13px; color: var(--muted); display: grid; 
   <section aria-labelledby="h-uf">
     <div class="sec-head"><h2 id="h-uf">Presidente por estado</h2><span class="label" id="uf-meta"></span></div>
     <div class="states">
-      <div>
+      <div class="mapa">
         <div class="tiles" id="tiles"></div>
         <div class="legend" id="legend"></div>
       </div>
@@ -281,7 +283,7 @@ const TILE = {
 const REFRESH_MS = 30000;
 // Versão publicada. A cada atualização a página compara com versao.json e, se houver
 // versão nova no ar, recarrega sozinha. Ao publicar: mudar aqui e no versao.json.
-const VERSAO = "2026-10-25.1";
+const VERSAO = "2026-10-25.2";
 async function verificarVersao() {
   try {
     const r = await fetch(`versao.json?t=${Date.now()}`, { cache: "no-store" });
@@ -481,12 +483,13 @@ function renderGrafico(pts, [x0, x1], L, R) {
 }
 
 // ---------- renderização: estados ----------
+const primeiroNome = (nm) => String(nm).split(" ")[0];
 function renderStates() {
   const { linhas, proj, nomes } = tabela;
   const comProj = !!proj;
   const cols = [
     ["uf", "Estado"], ["pst", "Apurado"], ["p1", nomes[0], "c1"], ["bar", ""], ["p2", nomes[1], "c2"],
-    ...(comProj ? [["pj", "Projeção final"], ["saldo", "Saldo que falta"]] : [["dif", "Diferença"]]),
+    ...(comProj ? [["pj", "Projeção (vence)"], ["saldo", "Saldo que falta"]] : [["dif", "Diferença"]]),
   ];
   if (!cols.some(([k]) => k === sortKey)) { sortKey = "pst"; sortDir = -1; }
   $("#tbl thead").innerHTML = `<tr>${cols.map(([k, t, c]) => `<th data-k="${k}"${k === sortKey ? ` aria-sort="${sortDir > 0 ? "ascending" : "descending"}"` : ""}${c ? ` class="${c}"` : ""}>${esc(t)}</th>`).join("")}</tr>`;
@@ -509,7 +512,8 @@ function renderStates() {
       const p = pu(s.uf);
       if (p) {
         const sh = (100 * p.A) / (p.A + p.B), sal = p.restA - p.restB;
-        fim = `<td class="${sh >= 50 ? "c1" : "c2"}">${pf(sh, 1)}%</td><td class="${sal >= 0 ? "c1" : "c2"}">${Math.abs(sal) < 500 ? "—" : (sal > 0 ? "+" : "−") + nfc.format(Math.abs(sal))}</td>`;
+        const lidera = sh >= 50 ? nomes[0] : nomes[1];
+        fim = `<td class="${sh >= 50 ? "c1" : "c2"}" title="${esc(lidera)}">${pf(Math.max(sh, 100 - sh), 1)}% <span class="ufn">${esc(primeiroNome(lidera))}</span></td><td class="${sal >= 0 ? "c1" : "c2"}">${Math.abs(sal) < 500 ? "—" : (sal > 0 ? "+" : "−") + nfc.format(Math.abs(sal))}</td>`;
       } else fim = `<td>—</td><td>—</td>`;
     } else fim = `<td class="${s.p1 === s.p2 ? "" : s.p1 > s.p2 ? "c1" : "c2"}">${t ? nf.format(Math.abs(s.v1 - s.v2)) : "—"}</td>`;
     return `<tr>
