@@ -130,10 +130,6 @@ details summary { cursor: pointer; font-weight: 600; }
 details p { margin: 8px 0 0; max-width: 68ch; }
 
 /* estados */
-.states { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
-.mapa { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: center; }
-.mapa .tiles { flex: 0 1 300px; }
-.mapa .legend { flex-direction: column; gap: 6px; margin-top: 0; }
 @media (max-width: 760px) {
   .duel { grid-template-columns: 1fr 1fr; } .vs { display: none; }
   .cand img, .cand .ph { width: 48px; height: 60px; }
@@ -141,12 +137,6 @@ details p { margin: 8px 0 0; max-width: 68ch; }
   .cand .pct { font-size: clamp(34px, 11vw, 48px); } .cand .nm { font-size: 17px; }
   .status { margin-left: 0; }
 }
-.tiles { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; max-width: 300px; }
-.tile { aspect-ratio: 1; border-radius: 6px; display: grid; place-items: center; font-family: var(--display); font-weight: 600; font-size: 15px; position: relative; background: var(--line); color: var(--fg); max-width: 100%; }
-.tile small { position: absolute; bottom: 2px; font-family: var(--body); font-size: 9px; font-weight: 600; opacity: .85; }
-.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 10px; }
-.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
-
 .tbl-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 560px; }
 th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
@@ -219,13 +209,7 @@ footer { margin-top: 40px; font-size: 13px; color: var(--muted); display: grid; 
 
   <section aria-labelledby="h-uf">
     <div class="sec-head"><h2 id="h-uf">Presidente por estado</h2><span class="label" id="uf-meta"></span></div>
-    <div class="states">
-      <div class="mapa">
-        <div class="tiles" id="tiles"></div>
-        <div class="legend" id="legend"></div>
-      </div>
-      <div class="tbl-wrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>
-    </div>
+    <div class="tbl-wrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>
   </section>
 
   <footer>
@@ -270,20 +254,10 @@ const UFS = {
   rn: "Rio Grande do Norte", ro: "Rondônia", rr: "Roraima", rs: "Rio Grande do Sul", sc: "Santa Catarina",
   se: "Sergipe", sp: "São Paulo", to: "Tocantins", zz: "Exterior",
 };
-// Posição [coluna, linha] no mapa de quadradinhos
-const TILE = {
-  rr: [1,0], ap: [3,0],
-  am: [1,1], pa: [2,1], ma: [3,1], ce: [4,1], rn: [5,1],
-  ac: [0,2], ro: [1,2], to: [2,2], pi: [3,2], pe: [4,2], pb: [5,2],
-  mt: [1,3], go: [2,3], ba: [3,3], se: [4,3], al: [5,3],
-  ms: [1,4], df: [2,4], mg: [3,4], es: [4,4],
-  pr: [1,5], sp: [2,5], rj: [3,5],
-  sc: [1,6], rs: [1,7],
-};
 const REFRESH_MS = 30000;
 // Versão publicada. A cada atualização a página compara com versao.json e, se houver
 // versão nova no ar, recarrega sozinha. Ao publicar: mudar aqui e no versao.json.
-const VERSAO = "2026-10-25.4";
+const VERSAO = "2026-10-25.5";
 async function verificarVersao() {
   try {
     const r = await fetch(`versao.json?t=${Date.now()}`, { cache: "no-store" });
@@ -400,8 +374,6 @@ function renderPres(r, ele) {
   $("#pres-others").innerHTML = rest.length ? `<div class="label">Demais candidatos</div>` +
     rest.map((c) => `<div class="row"><span>${esc(c.nm)} <span class="num">(${esc(c.n)})</span></span><span>${nf.format(c.vap)}</span><span>${pf(c.pct)}%</span></div>`).join("") : "";
   $("#pres-meta").textContent = r.hora ? `Totalizado às ${r.hora}` : "";
-  $("#legend").innerHTML = left && right ?
-    `<span><i style="background:var(--c1)"></i>${esc(left.nm)}</span><span><i style="background:var(--c2)"></i>${esc(right.nm)}</span><span>Cor mais forte = margem maior no apurado</span>` : "";
   return [left, right];
 }
 
@@ -525,18 +497,6 @@ function renderStates() {
     </tr>`;
   }).join("");
 
-  const by = Object.fromEntries(linhas.map((s) => [s.uf, s]));
-  $("#tiles").innerHTML = Object.entries(TILE).map(([uf, [c, r]]) => {
-    const s = by[uf];
-    let style = `grid-column:${c + 1};grid-row:${r + 1};`, sub = "";
-    if (s && !s.err && s.p1 + s.p2 > 0) {
-      const m = Math.min(Math.abs(s.p1 - s.p2) / 20, 1);
-      style += `background:color-mix(in srgb, var(${s.p1 >= s.p2 ? "--c1" : "--c2"}) ${Math.round(25 + m * 75)}%, var(--surface));`;
-      if (m > 0.45) style += "color:#fff;";
-      sub = `<small>${pf(s.pst, 0)}%</small>`;
-    }
-    return `<div class="tile" style="${style}" title="${UFS[uf]}">${uf.toUpperCase()}${sub}</div>`;
-  }).join("");
   const done = linhas.filter((s) => !s.err && s.pst >= 100).length;
   $("#uf-meta").textContent = `${done} de ${linhas.length} com 100% apurado`;
 }
