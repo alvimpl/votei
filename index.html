@@ -49,9 +49,6 @@ button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px 
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
 .dot.live { background: var(--ok); }
 .dot.err { background: var(--bad); }
-.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 3px 12px; cursor: pointer; font-size: 13px; }
-.btn:hover:not(:disabled) { border-color: var(--fg); }
-.btn:disabled { opacity: .5; cursor: default; }
 .flash { animation: flash 1.6s ease-out; }
 @keyframes flash { 0% { background: var(--c1-soft); } 100% { background: var(--surface); } }
 @media (prefers-reduced-motion: reduce) { .flash { animation: none; } }
@@ -161,7 +158,7 @@ footer { margin-top: 40px; font-size: 13px; color: var(--muted); display: grid; 
     </div>
     <div class="status">
       <span class="dot" id="dot"></span><span id="status-txt">Carregando…</span>
-      <button class="btn" id="btn-atualizar" type="button">Atualizar agora</button>
+      <span id="proxima"></span>
     </div>
   </div>
 </header>
@@ -213,7 +210,7 @@ footer { margin-top: 40px; font-size: 13px; color: var(--muted); display: grid; 
   </section>
 
   <footer>
-    <div>Dados lidos direto dos arquivos públicos do TSE (resultados.tse.jus.br), atualizados a cada 30 s.</div>
+    <div>Dados lidos direto dos arquivos públicos do TSE (resultados.tse.jus.br), atualizados automaticamente a cada 2 minutos.</div>
     <div>O TSE publica com cache de cerca de 1 minuto. Nenhum site recebe o número antes disso.</div>
     <div>A projeção é uma estimativa estatística feita por esta página, não um dado oficial.</div>
   </footer>
@@ -254,10 +251,12 @@ const UFS = {
   rn: "Rio Grande do Norte", ro: "Rondônia", rr: "Roraima", rs: "Rio Grande do Sul", sc: "Santa Catarina",
   se: "Sergipe", sp: "São Paulo", to: "Tocantins", zz: "Exterior",
 };
-const REFRESH_MS = 30000;
+const REFRESH_MS = 120000;        // 2 minutos entre leituras
+const ESPALHAR_MS = 30000;        // cada aparelho soma até 30 s, para não baterem juntos no TSE
+const ESPERA_429_MS = 240000;     // se o TSE recusar por excesso de acessos, espera 4 minutos
 // Versão publicada. A cada atualização a página compara com versao.json e, se houver
 // versão nova no ar, recarrega sozinha. Ao publicar: mudar aqui e no versao.json.
-const VERSAO = "2026-10-25.5";
+const VERSAO = "2026-10-25.6";
 async function verificarVersao() {
   try {
     const r = await fetch(`versao.json?t=${Date.now()}`, { cache: "no-store" });
@@ -267,7 +266,11 @@ async function verificarVersao() {
     let ja = null; try { ja = sessionStorage.getItem("votei.recarregou"); } catch {}
     if (ja === v) return;
     try { sessionStorage.setItem("votei.recarregou", v); } catch {}
-    location.replace(`${location.pathname}?v=${encodeURIComponent(v)}${location.hash}`);
+    // Recarga espalhada em até 60 s, para os aparelhos não recarregarem todos ao mesmo tempo
+    if (!verificarVersao.agendada) {
+      verificarVersao.agendada = true;
+      setTimeout(() => location.replace(`${location.pathname}?v=${encodeURIComponent(v)}${location.hash}`), Math.random() * 60000);
+    }
   } catch {}
 }
 
@@ -283,8 +286,10 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 
+let limitadoNoCiclo = false; // algum arquivo do TSE respondeu 429 nesta leitura
 async function getJSON(url) {
   const r = await fetch(url, { cache: "no-cache" });
+  if (r.status === 429) limitadoNoCiclo = true;
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
@@ -538,6 +543,7 @@ async function carregarAoVivo() {
       // Projeção parcial enquanto os municípios chegam (primeira abertura no meio da apuração)
       const parcial = () => modo === m0 && renderProj(projetar(base, montarObs(est)), L, R, store.get(`votei.hist.${T.pres}`) || [], [17 * 60, 18 * 60]);
       ({ falhas } = await atualizarMunicipios(est, L.n, R.n, getJSON, {
+        concorrencia: 6,
         onProgresso: (f, t) => setStatus("", `Lendo municípios ${f}/${t}…`),
         onParcial: parcial,
       }));
@@ -573,33 +579,46 @@ async function carregarAoVivo() {
 }
 
 // ---------- ciclo ----------
+let ultimaLeitura = 0;
 async function load() {
   if (ocupado) return;
-  ocupado = true; $("#btn-atualizar").disabled = true;
+  ocupado = true;
   clearTimeout(timer);
   const m0 = modo;
+  let espera = REFRESH_MS + Math.random() * ESPALHAR_MS;
+  limitadoNoCiclo = false;
   try {
     const pres = await carregarAoVivo();
     if ($("#notice").classList.contains("err")) notice("");
     setStatus(pres.pst > 0 && pres.pst < 100 ? "live" : "", `TSE gerou às ${pres.hg || "—"}`);
+    if (limitadoNoCiclo) {
+      espera = ESPERA_429_MS + Math.random() * ESPALHAR_MS;
+      notice(`O TSE recusou parte das consultas por excesso de acessos. A página tenta de novo sozinha em cerca de ${Math.round(espera / 60000)} minutos.`);
+    }
   } catch (e) {
     if (e !== CANCELADO && modo === m0) {
-      setStatus("err", "Falha ao buscar");
-      notice(`Não foi possível buscar os dados do TSE (${e.message}). Nova tentativa em ${REFRESH_MS / 1000} s.`, true);
+      const limitado = limitadoNoCiclo || /429/.test(e.message);
+      if (limitado) espera = ESPERA_429_MS + Math.random() * ESPALHAR_MS;
+      setStatus("err", limitado ? "TSE limitando acessos" : "Falha ao buscar");
+      notice(limitado
+        ? `O TSE está recusando parte dos acessos por excesso de consultas. A página tenta de novo sozinha em cerca de ${Math.round(espera / 60000)} minutos; os números da tela são da última leitura que deu certo.`
+        : `Não foi possível buscar os dados do TSE (${e.message}). A página tenta de novo sozinha em cerca de 2 minutos.`, true);
     }
   }
-  ocupado = false; $("#btn-atualizar").disabled = false;
+  ocupado = false;
+  ultimaLeitura = Date.now();
   if (modo !== m0) return load(); // trocou de modo durante a leitura: lê o modo novo já
-  proxima = Date.now() + REFRESH_MS;
-  timer = setTimeout(load, REFRESH_MS);
+  proxima = Date.now() + espera;
+  timer = setTimeout(load, espera);
 }
 setInterval(() => {
   if (ocupado || !proxima) return;
   const s = Math.max(0, Math.round((proxima - Date.now()) / 1000));
-  $("#btn-atualizar").textContent = `Atualizar agora · ${s}s`;
+  $("#proxima").textContent = `· próxima em ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }, 1000);
 
-async function setModo(m) {
+async function setModo(m, inicio) {
+  if (m === modo && !inicio) return; // clicar no modo que já está aberto não faz nova leitura
   modo = m; store.set("votei.modo", m);
   document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.modo === m)));
   lastStamp = ""; clearTimeout(timer);
@@ -608,17 +627,17 @@ async function setModo(m) {
 }
 
 document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => setModo(b.dataset.modo)));
-$("#btn-atualizar").addEventListener("click", () => load());
 $("#tbl thead").addEventListener("click", (ev) => {
   const th = ev.target.closest("th"); if (!th) return;
   const k = th.dataset.k;
   if (k === sortKey) sortDir = -sortDir; else { sortKey = k; sortDir = k === "uf" ? 1 : -1; }
   renderStates();
 });
-document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
-setModo(modo);
+// Ao voltar para a aba, só lê de novo se a última leitura tiver mais de 2 minutos
+document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - ultimaLeitura > REFRESH_MS) load(); });
+setModo(modo, true);
 // Acesso para teste pelo console do navegador
-window.votei = { base1t, projetar, estadoMunicipios, agora, sincronizarRelogio };
+window.votei = { base1t, projetar, estadoMunicipios, agora, sincronizarRelogio, load };
 </script>
 </body>
 </html>
