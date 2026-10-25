@@ -283,7 +283,7 @@ const TILE = {
 const REFRESH_MS = 30000;
 // Versão publicada. A cada atualização a página compara com versao.json e, se houver
 // versão nova no ar, recarrega sozinha. Ao publicar: mudar aqui e no versao.json.
-const VERSAO = "2026-10-25.3";
+const VERSAO = "2026-10-25.4";
 async function verificarVersao() {
   try {
     const r = await fetch(`versao.json?t=${Date.now()}`, { cache: "no-store" });
@@ -489,7 +489,7 @@ function renderStates() {
   const comProj = !!proj;
   const cols = [
     ["uf", "Estado"], ["pst", "Apurado"], ["p1", nomes[0], "c1"], ["bar", ""], ["p2", nomes[1], "c2"],
-    ...(comProj ? [["pj", "Projeção (vence)"], ["saldo", "Saldo que falta"]] : [["dif", "Diferença"]]),
+    ...(comProj ? [["pj", "Projeção (vence)"], ["saldo", "Vantagem que falta"]] : [["dif", "Diferença"]]),
   ];
   if (!cols.some(([k]) => k === sortKey)) { sortKey = "pst"; sortDir = -1; }
   $("#tbl thead").innerHTML = `<tr>${cols.map(([k, t, c]) => `<th data-k="${k}"${k === sortKey ? ` aria-sort="${sortDir > 0 ? "ascending" : "descending"}"` : ""}${c ? ` class="${c}"` : ""}>${esc(t)}</th>`).join("")}</tr>`;
@@ -500,7 +500,7 @@ function renderStates() {
     if (k === "dif") return Math.abs(s.v1 - s.v2);
     if (k === "bar") return s.p1 - s.p2;
     if (k === "pj") return p ? p.A / (p.A + p.B) : -1;
-    if (k === "saldo") return p ? p.restA - p.restB : 0;
+    if (k === "saldo") return p ? Math.abs(p.restA - p.restB) : 0;
     return s[k];
   };
   const rows = linhas.slice().sort((x, y) => sortKey === "uf" ? sortDir * UFS[x.uf].localeCompare(UFS[y.uf]) : sortDir * (val(x, sortKey) - val(y, sortKey)));
@@ -513,7 +513,7 @@ function renderStates() {
       if (p) {
         const sh = (100 * p.A) / (p.A + p.B), sal = p.restA - p.restB;
         const lidera = sh >= 50 ? nomes[0] : nomes[1];
-        fim = `<td class="${sh >= 50 ? "c1" : "c2"}" title="${esc(lidera)}">${pf(Math.max(sh, 100 - sh), 1)}% <span class="ufn">${esc(primeiroNome(lidera))}</span></td><td class="${sal >= 0 ? "c1" : "c2"}">${Math.abs(sal) < 500 ? "—" : (sal > 0 ? "+" : "−") + nfc.format(Math.abs(sal))}</td>`;
+        fim = `<td class="${sh >= 50 ? "c1" : "c2"}" title="${esc(lidera)}">${pf(Math.max(sh, 100 - sh), 1)}% <span class="ufn">${esc(primeiroNome(lidera))}</span></td><td class="${sal >= 0 ? "c1" : "c2"}">${Math.abs(sal) < 500 ? "—" : `${nfc.format(Math.abs(sal))} <span class="ufn">${esc(primeiroNome(sal > 0 ? nomes[0] : nomes[1]))}</span>`}</td>`;
       } else fim = `<td>—</td><td>—</td>`;
     } else fim = `<td class="${s.p1 === s.p2 ? "" : s.p1 > s.p2 ? "c1" : "c2"}">${t ? nf.format(Math.abs(s.v1 - s.v2)) : "—"}</td>`;
     return `<tr>
